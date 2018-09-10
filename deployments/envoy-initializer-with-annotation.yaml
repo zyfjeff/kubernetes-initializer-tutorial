@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: envoy-initializer
-          image: gcr.io/hightowerlabs/envoy-initializer:0.0.1
+          image: resouer/envoy-initializer:0.0.1
           imagePullPolicy: Always
           args:
             - "-annotation=initializer.kubernetes.io/envoy"
