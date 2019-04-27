@@ -1,5 +1,5 @@
 #!/bin/bash
 ./build
-docker build -t resouer/envoy-initializer:0.0.1 .
-docker push resouer/envoy-initializer:0.0.1
+docker build -t zyfjeff/envoy-initializer:0.0.1 .
+docker push zefjeff/envoy-initializer:0.0.1
 rm envoy-initializer

@@ -16,5 +16,5 @@ spec:
     spec:
       containers:
         - name: envoy-initializer
-          image: resouer/envoy-initializer:0.0.1
+          image: zyfjeff/envoy-initializer:0.0.1
           imagePullPolicy: Always

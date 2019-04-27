@@ -1,58 +1,77 @@
 {
   "listeners": [
     {
-      "address": "tcp://0.0.0.0:80",
-      "filters": [
+      "address": {
+        "socket_address": {
+          "address": "0.0.0.0",
+          "port_value": 80
+        }
+      },
+      "filter_chains": [
         {
-          "type": "read",
-          "name": "http_connection_manager",
-          "config": {
-            "codec_type": "auto",
-            "stat_prefix": "ingress_http",
-            "route_config": {
-              "virtual_hosts": [
-                {
-                  "name": "backend",
-                  "domains": ["*"],
-                  "routes": [
+          "filters": [
+            {
+              "name": "envoy.http_connection_manager",
+              "config": {
+                "codec_type": "auto",
+                "stat_prefix": "ingress_http",
+                "route_config": {
+                  "name": "local_route",
+                  "virtual_hosts": [
                     {
-                      "timeout_ms": 0,
-                      "prefix": "/",
-                      "cluster": "localhost"
+                      "name": "backend",
+                      "domains": [
+                        "*"
+                      ],
+                      "routes": [
+                        {
+                          "match": {
+                            "prefix": "/service/1"
+                          },
+                          "route": {
+                            "cluster": "service1"
+                          }
+                        }
+                      ]
                     }
                   ]
-                }
-              ]
-            },
-            "filters": [
-              {
-                "type": "decoder",
-                "name": "router",
-                "config": {}
+                },
+                "http_filters": [
+                  {
+                    "name": "envoy.router",
+                    "config": {
+                    }
+                  }
+                ]
               }
-            ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "clusters": [
+    {
+      "name": "service1",
+      "connect_timeout": "0.25s",
+      "type": "strict_dns",
+      "lb_policy": "round_robin",
+      "hosts": [
+        {
+          "socket_address": {
+            "address": "www.baidu.com",
+            "port_value": 80
           }
         }
       ]
     }
   ],
-  "admin": {
-    "access_log_path": "/dev/null",
-    "address": "tcp://0.0.0.0:8001"
-  },
-  "cluster_manager": {
-    "clusters": [
-      {
-        "name": "localhost",
-        "connect_timeout_ms": 250,
-        "type": "static",
-        "lb_type": "round_robin",
-        "hosts": [
-          {
-            "url": "tcp://127.0.0.1:8080"
-          }
-        ]
-      }
-    ]
+  "admin": null,
+  "access_log_path": "/dev/null",
+  "address": {
+    "socket_address": {
+      "address": "0.0.0.0",
+      "port_value": 8080
+    }
   }
 }

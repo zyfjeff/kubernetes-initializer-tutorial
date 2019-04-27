@@ -19,10 +19,11 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+  "path/filepath"
 
 	"github.com/ghodss/yaml"
 
-	"k8s.io/api/apps/v1beta1"
+	"k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
@@ -33,6 +34,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
+  "k8s.io/client-go/tools/clientcmd"
 )
 
 const (
@@ -48,6 +50,7 @@ var (
 	initializerName   string
 	namespace         string
 	requireAnnotation bool
+	kubeconfig bool
 )
 
 type config struct {
@@ -61,16 +64,27 @@ func main() {
 	flag.StringVar(&initializerName, "initializer-name", defaultInitializerName, "The initializer name")
 	flag.StringVar(&namespace, "namespace", "default", "The configuration namespace")
 	flag.BoolVar(&requireAnnotation, "require-annotation", false, "Require annotation for initialization")
+	flag.BoolVar(&kubeconfig, "kubeconfig", false, "use kubeconfig")
 	flag.Parse()
 
 	log.Println("Starting the Kubernetes initializer...")
 	log.Printf("Initializer name set to: %s", initializerName)
-
-	clusterConfig, err := rest.InClusterConfig()
-	if err != nil {
-		log.Fatal(err.Error())
-	}
-
+  
+  var clusterConfig *rest.Config
+  var err error
+  if !kubeconfig {
+    clusterConfig, err = rest.InClusterConfig()
+    if err != nil {
+      log.Fatal(err.Error())
+    }
+  } else {
+    kubeConfig := filepath.Join(os.Getenv("HOME"), ".kube", "config")
+    clusterConfig, err = clientcmd.BuildConfigFromFlags("", kubeConfig)
+    if err != nil {
+      log.Fatal(err.Error())  
+    }
+  }
+  
 	clientset, err := kubernetes.NewForConfig(clusterConfig)
 	if err != nil {
 		log.Fatal(err)
@@ -88,28 +102,26 @@ func main() {
 	}
 
 	// Watch uninitialized Deployments in all namespaces.
-	restClient := clientset.AppsV1beta1().RESTClient()
+	restClient := clientset.AppsV1().RESTClient()
 	watchlist := cache.NewListWatchFromClient(restClient, "deployments", corev1.NamespaceAll, fields.Everything())
 
 	// Wrap the returned watchlist to workaround the inability to include
 	// the `IncludeUninitialized` list option when setting up watch clients.
 	includeUninitializedWatchlist := &cache.ListWatch{
 		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-			options.IncludeUninitialized = true
 			return watchlist.List(options)
 		},
 		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-			options.IncludeUninitialized = true
 			return watchlist.Watch(options)
 		},
 	}
 
 	resyncPeriod := 30 * time.Second
 
-	_, controller := cache.NewInformer(includeUninitializedWatchlist, &v1beta1.Deployment{}, resyncPeriod,
+	_, controller := cache.NewInformer(includeUninitializedWatchlist, &v1.Deployment{}, resyncPeriod,
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
-				err := initializeDeployment(obj.(*v1beta1.Deployment), c, clientset)
+				err := initializeDeployment(obj.(*v1.Deployment), c, clientset)
 				if err != nil {
 					log.Println(err)
 				}
@@ -128,18 +140,14 @@ func main() {
 	close(stop)
 }
 
-func initializeDeployment(deployment *v1beta1.Deployment, c *config, clientset *kubernetes.Clientset) error {
+func initializeDeployment(deployment *v1.Deployment, c *config, clientset *kubernetes.Clientset) error {
 	if deployment.ObjectMeta.GetInitializers() != nil {
 		pendingInitializers := deployment.ObjectMeta.GetInitializers().Pending
 
 		if initializerName == pendingInitializers[0].Name {
 			log.Printf("Initializing deployment: %s", deployment.Name)
 
-			o, err := runtime.NewScheme().DeepCopy(deployment)
-			if err != nil {
-				return err
-			}
-			initializedDeployment := o.(*v1beta1.Deployment)
+			initializedDeployment := deployment.DeepCopy()
 
 			// Remove self from the list of pending Initializers while preserving ordering.
 			if len(pendingInitializers) == 1 {
@@ -153,7 +161,7 @@ func initializeDeployment(deployment *v1beta1.Deployment, c *config, clientset *
 				_, ok := a[annotation]
 				if !ok {
 					log.Printf("Required '%s' annotation missing; skipping envoy container injection", annotation)
-					_, err = clientset.AppsV1beta1().Deployments(deployment.Namespace).Update(initializedDeployment)
+					_, err := clientset.AppsV1().Deployments(deployment.Namespace).Update(initializedDeployment)
 					if err != nil {
 						return err
 					}
@@ -176,12 +184,12 @@ func initializeDeployment(deployment *v1beta1.Deployment, c *config, clientset *
 				return err
 			}
 
-			patchBytes, err := strategicpatch.CreateTwoWayMergePatch(oldData, newData, v1beta1.Deployment{})
+			patchBytes, err := strategicpatch.CreateTwoWayMergePatch(oldData, newData, v1.Deployment{})
 			if err != nil {
 				return err
 			}
 
-			_, err = clientset.AppsV1beta1().Deployments(deployment.Namespace).Patch(deployment.Name, types.StrategicMergePatchType, patchBytes)
+			_, err = clientset.AppsV1().Deployments(deployment.Namespace).Patch(deployment.Name, types.StrategicMergePatchType, patchBytes)
 			if err != nil {
 				return err
 			}

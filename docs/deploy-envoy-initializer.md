@@ -1,12 +1,12 @@
 # Deploy The Envoy Initializer
 
-The Envoy Initializer is a [Kubernetes Initializer](https://kubernetes.io/docs/admin/extensible-admission-controllers/#what-are-initializers) that injects an [Envoy](https://lyft.github.io/envoy) proxy into Deployments based on containers and volumes defined in a [ConfigMap](https://kubernetes.io/docs/tasks/configure-pod-container/configure-pod-configmap).
+The Envoy Initializer is a [Kubernetes Initializer](https://kubernetes.io/docs/admin/extensible-admission-controllers/#what-are-initializers) that injects an [Envoy](https://envoyproxy.github.io/envoy) proxy into Deployments based on containers and volumes defined in a [ConfigMap](https://kubernetes.io/docs/tasks/configure-pod-container/configure-pod-configmap).
 
 ## Install
 
 ### Store the Envoy configuration in a ConfigMap
 
-Envoy requires a [configuration file](https://lyft.github.io/envoy/docs/configuration/configuration.html) before it can proxy traffic to other containers in a Pod. Store the `envoy.json` configuration file in a ConfigMap:
+Envoy requires a [configuration file](https://www.envoyproxy.io/docs/envoy/latest/configuration/configuration) before it can proxy traffic to other containers in a Pod. Store the `envoy.json` configuration file in a ConfigMap:
 
 ```
 kubectl create configmap envoy --from-file envoy.json
@@ -31,7 +31,7 @@ kubectl apply -f deployments/envoy-initializer.yaml
 The `envoy-initializer` Deployment sets pending initializers to an empty list which bypasses initialization. This prevents the Envoy Initializer from getting stuck waiting for initialization, which can happen if the `envoy` [Initialization Configuration](initializing-deployments.md#create-the-envoy-initializer-InitializerConfiguration) is created before the `envoy-initializer` Deployment.
 
 ```
-apiVersion: apps/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   initializers:
